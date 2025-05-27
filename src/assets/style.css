@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Lexend+Deca&display=swap');
+
+* {
+  box-sizing: border-box;
+  transition: all ease .2s;
+}
+
+body {
+  font-family: "Lexend Deca", sans-serif;
+}
+
+.Modal {
+  position: absolute;
+  top: 20vh;
+  left: 37vw; 
+  right: auto;
+  bottom: auto;
+  background-color: #14121F;
+  border: solid 1px #14121F;
+  color: aliceblue;
+  border-radius: 5px;
+  width: 25vw;
+  height: 60vh;
+}
+
+.Overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  margin-right: -50%;
+  transform: translate(-50%, -50%);
+  background-color: rebeccapurple;
+}
