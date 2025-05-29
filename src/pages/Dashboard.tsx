@@ -1,15 +1,16 @@
 // src/pages/Dashboard.tsx
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import styled from 'styled-components';
 import {
   FaLeaf, FaMapMarkerAlt, FaTasks, FaExclamationTriangle,
   FaChartLine, FaChartBar, FaBullseye, FaBell, FaLink, FaMapMarkedAlt
 } from 'react-icons/fa';
-import { FiCpu } from 'react-icons/fi';
+import { FiAlertCircle, FiCpu, FiLink, FiLoader } from 'react-icons/fi';
 import {
   LineChart, Line, BarChart, Bar, RadialBarChart, RadialBar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PolarAngleAxis
 } from 'recharts';
+import axios from 'axios';
 
 // --- Mock Data ---
 const kpiData = {
@@ -33,7 +34,33 @@ const humidityComparisonData = [
   { area: 'Estufa 2', umidade: 68 },
 ];
 
+
 const reservoirLevelData = [{ name: 'Nível', value: 75, fill: '#3b82f6' }]; // 75%
+
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const MOCK_USER_ID = 3; // Usaremos para buscar as estatísticas
+
+// --- Interfaces para os Dados do Dashboard ---
+interface DashboardStats {
+  totalAreas: number;
+  totalSensors: number;
+  activeSensors: number;
+  // Adicionar outras estatísticas se o backend as fornecer
+}
+
+
+
+const dailyTemperatureData = [
+  { day: 'Seg', temp: 22 }, { day: 'Ter', temp: 24 }, { day: 'Qua', temp: 23 },
+  { day: 'Qui', temp: 25 }, { day: 'Sex', temp: 26 }, { day: 'Sáb', temp: 24 },
+  { day: 'Dom', temp: 23 },
+];
+const mockAlertsCount = 2; // Mock para o card de alertas por enquanto
+
+
+
+
 
 const activeAlerts = [
   { id: 'alert1', message: 'Sensor de pH do Talhão B offline.', severity: 'alta' },
@@ -50,10 +77,86 @@ const quickLinksData = [
 
 
 
+// --- Interfaces ---
+interface DashboardStats {
+  totalAreas: number;
+  totalSensors: number;
+  activeSensors: number;
+}
+
+interface TemperatureReading { // Para os dados do gráfico de temperatura
+  timestamp: string; // String ISO do backend
+  value: number;     // Valor da temperatura
+  // Adicionar sensorName se o backend retornar e você quiser diferenciar linhas no gráfico
+  // sensorName?: string; 
+}
 
 
-// --- Dashboard Component ---
+const formatTimestampForDisplay = (isoTimestamp: string, options?: Intl.DateTimeFormatOptions): string => {
+  if (!isoTimestamp) return 'N/A';
+  try {
+    const defaultOptions: Intl.DateTimeFormatOptions = {
+      hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short',
+      timeZone: 'America/Cuiaba', // Ajuste para seu fuso horário ou UTC
+    };
+    return new Date(isoTimestamp).toLocaleString('pt-BR', options || defaultOptions);
+  } catch (e) {
+    return "Data Inv.";
+  }
+};
+
+
 export default function Dashboard() {
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  // <<< NOVOS ESTADOS PARA O GRÁFICO DE TEMPERATURA >>>
+  const [temperatureTrendData, setTemperatureTrendData] = useState<TemperatureReading[]>([]);
+  const [isLoadingTempTrend, setIsLoadingTempTrend] = useState(true);
+  const [tempTrendError, setTempTrendError] = useState<string | null>(null);
+
+
+  const fetchDashboardStats = useCallback(async () => {
+    setIsLoadingStats(true);
+    setStatsError(null);
+    try {
+      const response = await axios.get(`${API_BASE_URL}/users/${MOCK_USER_ID}/dashboard-stats`);
+      setDashboardStats(response.data);
+    } catch (error) { /* ... tratamento de erro ... */ setStatsError("Falha ao carregar estatísticas.");} 
+    finally { setIsLoadingStats(false); }
+  }, []);
+
+  // <<< NOVA FUNÇÃO PARA BUSCAR DADOS DA TENDÊNCIA DE TEMPERATURA >>>
+  const fetchTemperatureTrend = useCallback(async () => {
+    setIsLoadingTempTrend(true);
+    setTempTrendError(null);
+    try {
+      // Você pode adicionar query params aqui se o backend os suportar (ex: ?limit=30 ou ?period=7d)
+      const response = await axios.get(`${API_BASE_URL}/users/${MOCK_USER_ID}/dashboard/temperature-trend`);
+      // O backend já deve retornar os dados ordenados por timestamp ASC
+      setTemperatureTrendData(response.data.map((item: any) => ({
+        timestamp: item.timestamp, // Mantém string ISO para dataKey
+        value: Number(item.value)  // Garante que 'value' seja número
+      })) || []);
+    } catch (error) {
+      console.error("Erro ao buscar tendência de temperatura:", error);
+      setTempTrendError("Não foi possível carregar os dados de temperatura.");
+      setTemperatureTrendData([]);
+    } finally {
+      setIsLoadingTempTrend(false);
+    }
+  }, []); // MOCK_USER_ID é constante
+
+  useEffect(() => {
+    // Busca ambos os conjuntos de dados quando o componente monta
+    fetchDashboardStats();
+    fetchTemperatureTrend();
+  }, [fetchDashboardStats, fetchTemperatureTrend]); // As dependências são estáveis
+
+  // Mock data para links rápidos
+  const quickLinksData = [ /* ... seus links ... */ ];
+
   return (
     <PageContainer>
       <Header>
@@ -61,149 +164,96 @@ export default function Dashboard() {
         <Title>AgroView Dashboard</Title>
       </Header>
 
-      <DashboardLayoutGrid>
-        {/* --- KPIs --- */}
+      {/* Exibe erro principal se houver erro nas estatísticas OU no gráfico de temperatura */}
+      {(statsError && <ApiErrorMessage><FiAlertCircle /> {statsError}</ApiErrorMessage>)}
+      {(tempTrendError && !statsError && <ApiErrorMessage><FiAlertCircle /> {tempTrendError}</ApiErrorMessage>)}
+
+
+      <DashboardGrid>
+        {/* KPIs (como na versão anterior, usando dashboardStats) */}
         <KPICard>
           <FaMapMarkerAlt size={28} color="#42a5f5" />
-          <KPIValue>{kpiData.totalAreas}</KPIValue>
+          {isLoadingStats ? <LoadingSpinner size={30} /> : <KPIValue>{dashboardStats?.totalAreas ?? '...'}</KPIValue>}
           <KPILabel>Áreas Monitoradas</KPILabel>
         </KPICard>
         <KPICard>
           <FiCpu size={28} color="#66bb6a" />
-          <KPIValue>{kpiData.activeSensors}</KPIValue>
+          {isLoadingStats ? <LoadingSpinner size={30} /> : <KPIValue>{dashboardStats?.totalSensors ?? '...'}</KPIValue>}
+          <KPILabel>Total de Sensores</KPILabel>
+        </KPICard>
+        <KPICard>
+          <FiCpu size={28} color="#388e3c" />
+          {isLoadingStats ? <LoadingSpinner size={30} /> : <KPIValue>{dashboardStats?.activeSensors ?? '...'}</KPIValue>}
           <KPILabel>Sensores Ativos</KPILabel>
         </KPICard>
         <KPICard>
-          <FaExclamationTriangle size={28} color="#ffa726" />
-          <KPIValue>{kpiData.sensorAlerts}</KPIValue>
-          <KPILabel>Alertas de Sensores</KPILabel>
-        </KPICard>
-        <KPICard>
-          <FaTasks size={28} color="#78909c" />
-          <KPIValue>{kpiData.upcomingTasks}</KPIValue>
-          <KPILabel>Tarefas Agendadas</KPILabel>
+          <FaBell size={28} color="#d32f2f" />
+          <KPIValue>{mockAlertsCount}</KPIValue> 
+          <KPILabel>Alertas Ativos (Mock)</KPILabel>
         </KPICard>
 
-        {/* --- Line Chart (Temperature Trend) --- */}
-        <ChartCard>
-          <CardTitle><FaChartLine /> Tendência de Temperatura (Últimas 24h)</CardTitle>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={temperatureTrendData} margin={{ top: 5, right: 25, left: -15, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#555' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#555' }} unit="°C" />
-              <Tooltip contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '8px', borderColor: '#ddd' }}/>
-              <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-              <Line type="monotone" dataKey="temp" name="Temperatura" stroke="#ff7300" strokeWidth={2.5} dot={{ r: 3, strokeWidth: 1 }} activeDot={{ r: 5 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* --- Bar Chart (Humidity Comparison) --- */}
-        <ChartCard>
-          <CardTitle><FaChartBar /> Umidade do Solo por Área</CardTitle>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={humidityComparisonData} margin={{ top: 5, right: 25, left: -15, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-              <XAxis dataKey="area" tick={{ fontSize: 11, fill: '#555' }} angle={-15} textAnchor="end" height={40} />
-              <YAxis tick={{ fontSize: 11, fill: '#555' }} unit="%" />
-              <Tooltip contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '8px', borderColor: '#ddd' }}/>
-              <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-              <Bar dataKey="umidade" name="Umidade" fill="#3b82f6" barSize={30} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* --- Gauge Chart (Reservoir Level - using RadialBarChart) --- */}
-        <GaugeCard>
-          <CardTitle><FaBullseye /> Nível do Reservatório Principal</CardTitle>
-          <ResponsiveContainer width="100%" height={300}>
-            <RadialBarChart
-              innerRadius="70%"
-              outerRadius="90%"
-              data={reservoirLevelData}
-              startAngle={180}
-              endAngle={0}
-              barSize={30}
-            >
-              <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
-              <RadialBar
-                background
-                dataKey="value" // O Recharts usará isso para obter o valor numérico (75)
-                angleAxisId={0}
-                // fill="#3b82f6" // A cor é pega de reservoirLevelData[index].fill
-                cornerRadius={15}
-              />
-              <Legend
-                iconSize={10}
-                layout="vertical"
-                verticalAlign="bottom"
-                align="center"
-                formatter={(value, entry, index) => {
-                  // Acessamos o nosso objeto de dados original usando o index
-                  const dataPoint = reservoirLevelData[index];
-
-                  if (dataPoint && typeof dataPoint.name === 'string' && typeof dataPoint.value === 'number') {
-                    // O componente Legend já renderiza a bolinha colorida usando entry.color (que virá de dataPoint.fill)
-                    // Aqui formatamos apenas o texto.
-                    return <span style={{ color: '#555' }}>{`${dataPoint.name}: ${dataPoint.value}%`}</span>;
-                  }
-                  
-                  // Fallback: se algo der errado com dataPoint
-                  // 'value' (primeiro argumento do formatter) é frequentemente o dataKey ou o 'name' da série.
-                  // Neste caso, como RadialBar não tem 'name' prop e dataKey é 'value', 'value' seria 75.
-                  // Se você quiser mostrar o nome padrão da legenda caso dataPoint falhe:
-                  // return <span style={{ color: '#555' }}>{value || 'Indisponível'}</span>;
-                  // Mas como estamos buscando name e value do dataPoint, um fallback genérico é bom.
-                  return <span style={{ color: '#555' }}>Informação Indisponível</span>;
-                }}
-              />
-              <Tooltip contentStyle={{ display: 'none' }} />
-            </RadialBarChart>
-          </ResponsiveContainer>
-        </GaugeCard>
-
-        {/* --- Alerts Section --- */}
-        <AlertsCard>
-          <CardTitle><FaBell /> Alertas e Notificações ({activeAlerts.length})</CardTitle>
-          {activeAlerts.length > 0 ? (
-            <AlertList>
-              {activeAlerts.map(alert => (
-                <AlertItem key={alert.id} severity={alert.severity}>
-                  {alert.message}
-                </AlertItem>
-              ))}
-            </AlertList>
+        {/* --- GRÁFICO DE TEMPERATURA ATUALIZADO --- */}
+        <ChartContainer>
+          <CardTitle><FaChartLine /> Tendência de Temperatura</CardTitle>
+          {isLoadingTempTrend ? (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
+              <LoadingSpinner size={30} color="#00796b" />
+            </div>
+          ) : tempTrendError ? (
+             <ApiErrorMessage style={{margin: 'auto', width: '80%'}}><FiAlertCircle/> {tempTrendError}</ApiErrorMessage>
+          ) : temperatureTrendData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart
+                data={temperatureTrendData} // <<< USA DADOS REAIS
+                margin={{ top: 5, right: 30, left: 0, bottom: 25 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                <XAxis
+                  dataKey="timestamp" // <<< USA O TIMESTAMP ISO ORIGINAL
+                  tick={{ fontSize: 10, fill: '#555' }}
+                  tickFormatter={(isoTimestamp) => formatTimestampForDisplay(isoTimestamp, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  angle={-30}
+                  textAnchor="end"
+                  height={50}
+                  interval="preserveStartEnd"
+                />
+                <YAxis tick={{ fontSize: 10, fill: '#555' }} unit="°C" domain={['auto', 'auto']} />
+                <Tooltip
+                  labelFormatter={(labelIsoTimestamp) => formatTimestampForDisplay(labelIsoTimestamp, {day: '2-digit', month: 'long', year:'numeric', hour: '2-digit', minute: '2-digit'})}
+                  formatter={(value: number) => [`${value.toFixed(1)}°C`, "Temperatura"]}
+                  contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '8px', borderColor: '#ddd' }}
+                />
+                <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                <Line type="monotone" dataKey="value" name="Temperatura" stroke="#ff7300" strokeWidth={2.5} activeDot={{ r: 6 }} dot={{ r: 3, fill:"#ff7300" }} />
+              </LineChart>
+            </ResponsiveContainer>
           ) : (
-            <p style={{ fontSize: '0.9rem', color: '#6b7280', textAlign: 'center', marginTop: '1rem' }}>
-              Nenhum alerta no momento.
-            </p>
+            <p style={{textAlign: 'center', color: '#6b7280', marginTop: '2rem'}}>Nenhum dado de temperatura encontrado para exibir.</p>
           )}
-        </AlertsCard>
-        
-        {/* --- Quick Links Section --- */}
-        <QuickLinksCard>
-          <CardTitle><FaLink /> Atalhos Rápidos</CardTitle>
-          <QuickLinksGrid>
-            {quickLinksData.map(link => (
-              <QuickLinkButton key={link.label} href={link.path} title={link.label}>
-                {link.icon}
-                {link.label}
-              </QuickLinkButton>
-            ))}
-          </QuickLinksGrid>
-        </QuickLinksCard>
+        </ChartContainer>
 
-        {/* --- Mini-Map Placeholder --- */}
+        {/* Outros Gráficos e Cards (mantêm dados mockados por enquanto) */}
+        <ChartContainer>
+          <CardTitle><FaChartBar /> Umidade por Área (Mock)</CardTitle>
+           {/* ... Seu BarChart com humidityComparisonData ... */}
+        </ChartContainer>
+        <GaugeCard>
+          <CardTitle><FaBullseye /> Nível do Reservatório (Mock)</CardTitle>
+          {/* ... Seu RadialBarChart com reservoirLevelData ... */}
+        </GaugeCard>
+        <AlertsCard>
+          <CardTitle><FaBell /> Alertas Recentes (Mock)</CardTitle>
+          {/* ... Seus AlertItems mockados ... */}
+        </AlertsCard>
+        <QuickLinksCard>
+          <CardTitle><FiLink /> Atalhos Rápidos</CardTitle>
+          {/* ... Seus QuickLinkButtons ... */}
+        </QuickLinksCard>
         <MapPlaceholderCard>
-          <div>
-            <FaMapMarkedAlt />
-            <CardTitle style={{ justifyContent: 'center' }}>Visão Geral do Mapa</CardTitle>
-            <p>Integração do mini-mapa de áreas monitoradas aparecerá aqui.</p>
-          </div>
+          {/* ... Seu placeholder de mapa ... */}
         </MapPlaceholderCard>
 
-      </DashboardLayoutGrid>
+      </DashboardGrid>
     </PageContainer>
   );
 }
@@ -461,3 +511,37 @@ const MapPlaceholderCard = styled(CardBase)`
     opacity: 0.7;
   }
 `;
+
+const LoadingSpinner = styled(FiLoader)` animation: spin 1s linear infinite; @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
+const ApiErrorMessage = styled.p` color: #b91c1c; background-color: #fee2e2; border: 1px solid #fca5a5; padding: 1rem; border-radius: 0.5rem; margin:1rem 0; text-align:center; display: flex; align-items: center; justify-content: center; gap: 0.5rem;`;
+
+
+
+
+const DashboardGrid = styled.div`
+  width: 100%;
+  max-width: 1400px; /* Ou o max-width que você decidiu (ex: 1600px) */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem; // Espaçamento entre os cards
+
+  @media (min-width: 768px) { // Para tablets
+    grid-template-columns: repeat(2, 1fr); // Exemplo: 2 colunas
+  }
+  @media (min-width: 1024px) { // Para desktops
+    grid-template-columns: repeat(4, 1fr); // Exemplo: 4 colunas para KPIs, gráficos podem usar span
+  }
+`;
+
+
+// ChartContainer herda de CardBase
+const ChartContainer = styled(CardBase)`
+  min-height: 380px; // Altura mínima para acomodar bem o gráfico
+  padding-bottom: 0.5rem; // Menos padding no fundo se a legenda do gráfico já der espaço
+
+  @media (min-width: 1024px) {
+    grid-column: span 2; // Faz o gráfico ocupar 2 colunas no grid de 4
+    // Ex: &:first-of-type { grid-row: span 2; } // Se quisesse que o primeiro gráfico fosse mais alto
+  }
+`;
+

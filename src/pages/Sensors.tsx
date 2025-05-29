@@ -420,7 +420,7 @@ const FormGroup = styled.div`
 `;
 const Input = styled.input`
   width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.5rem; font-size: 0.9rem;
-  color: #1f2937; transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  color: #d1d5db; transition: border-color 0.2s ease, box-shadow 0.2s ease;
   &:focus { outline: none; border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.2); }
   &::placeholder { color: #9ca3af; }
 `;
