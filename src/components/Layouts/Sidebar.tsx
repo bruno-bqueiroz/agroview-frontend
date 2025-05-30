@@ -100,10 +100,10 @@ export default function Sidebar({ children }: SidebarProps) {
           <h2>AgroView</h2>
           <ul>
             {/* Para o link ativo, você precisará do NavLink do react-router-dom no futuro */}
-            <li><a href="/dashboard">Dashboard</a></li>
-            <li><a href="/areas">Áreas</a></li>
-            <li><a href="/sensors">Sensores</a></li>
-            <li><a href="/sensor-data">Dados dos Sensores</a></li>
+            <li><a href="/app/dashboard">Dashboard</a></li>
+            <li><a href="/app/areas">Áreas</a></li>
+            <li><a href="/app/sensors">Sensores</a></li>
+            <li><a href="/app/sensor-data">Dados dos Sensores</a></li>
             {/* Adicione mais links conforme necessário */}
           </ul>
         </div>

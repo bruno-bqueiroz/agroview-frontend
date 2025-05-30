@@ -1,9 +1,12 @@
 // src/pages/SensorData.tsx
 import React, { useState, useEffect, useCallback, ChangeEvent } from 'react';
 import styled from 'styled-components';
-import axios from 'axios';
+import { api } from '../services/api'; // <<< Usando a instância 'api' configurada
 import { useForm, SubmitHandler } from 'react-hook-form';
-import { FiActivity, FiDatabase, FiList, FiThermometer, FiBarChart2, FiPlus, FiLoader, FiAlertCircle, FiSave } from 'react-icons/fi';
+import { 
+  FiActivity, FiDatabase, FiList, FiBarChart2, 
+  FiPlus, FiLoader, FiAlertCircle, FiSave 
+} from 'react-icons/fi';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
@@ -19,125 +22,181 @@ interface ISensorDataReading {
   id: number;
   sensorId: number;
   value: number;
-  timestamp: string; // Manter como string ISO original do backend
+  timestamp: string; // String ISO original do backend
 }
 
 interface AddReadingFormData {
-  value: number;
+  value: string; // Input type="number" pode retornar string, converteremos
   timestamp?: string; // Do input datetime-local (YYYY-MM-DDTHH:mm)
 }
 
 // --- Constantes ---
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-const MOCK_USER_ID = 3;
+// API_BASE_URL é gerenciada pela instância 'api'
+// MOCK_USER_ID não é mais necessário aqui para as chamadas principais
 
-// --- Styled Components (COLE AQUI TODOS OS SEUS STYLED COMPONENTS DEFINIDOS ANTERIORMENTE) ---
-const PageContainer = styled.div` /* ...seus estilos... */ 
-  padding: 2rem; background-color: #f0fdf4; min-height: calc(100vh - 4rem);
+// --- Styled Components (COLE AQUI SUAS DEFINIÇÕES COMPLETAS) ---
+// Certifique-se de que estas definições estão no seu arquivo e são únicas.
+const PageContainer = styled.div`
+  padding: 2rem;
+  background-color: #f0fdf4;
+  min-height: calc(100vh - 4rem); 
 `;
-const Header = styled.header` /* ...seus estilos... */ 
-  display: flex; align-items: center;  margin-bottom: 2rem; gap: 0.75rem;
+const Header = styled.header`
+  display: flex;
+  align-items: center;
+  margin-bottom: 2rem;
+  gap: 0.75rem;
 `;
-const Title = styled.h1` /* ...seus estilos... */ 
-  font-size: 2rem; font-weight: 700; color: #004d40;
+const Title = styled.h1`
+  font-size: 2rem;
+  font-weight: 700;
+  color: #004d40;
 `;
-const ControlRow = styled.div` /* ...seus estilos... */ 
-  display: flex; gap: 1rem; align-items: flex-end; margin-bottom: 2rem; flex-wrap: wrap;
+const ControlRow = styled.div`
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
 `;
-const SensorSelectGroup = styled.div` /* ...seus estilos... */ 
-  display: flex; flex-direction: column; gap: 0.5rem; min-width: 250px ;
+const SensorSelectGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 250px;
 `;
-const Label = styled.label` /* ...seus estilos... */  
-  font-size: 0.9rem;  font-weight: 500; color: #374151;
+const Label = styled.label`
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #374151;
 `;
 const StyledSelect = styled.select`
   padding: 0.75rem;
   border: 1px solid #d1d5db;
   border-radius: 0.5rem;
   font-size: 1rem;
-  background-color: white; /* Fundo continua branco */
-  color: #1f2937;        /* <<< ADICIONADO: Define a cor do texto para um tom escuro */
+  background-color: white;
+  color: #1f2937;
   min-width: 250px;
-
   &:focus {
     outline: none;
-    border-color: #16a34a; /* Verde AgroView no foco */
-    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.2); /* Sombra de foco verde clara */
+    border-color: #16a34a;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.2);
   }
-
-  /* Opcional: Estilizar as opções também, embora seja mais limitado entre navegadores */
   option {
-    color: #1f2937; /* Garante que as opções também tenham texto escuro */
-    background-color: white; /* Garante fundo branco para as opções */
+    color: #1f2937;
+    background-color: white;
   }
 `;
-
-const ToggleFormButton = styled.button` /* ...seus estilos... */ 
-  background-color: #16a34a; color: white; padding: 0.65rem 1.25rem; border: none; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; transition: background-color 0.2s ease; align-self: flex-end; margin-bottom: 0.05rem; &:hover { background-color: #12883e; } &:disabled { background-color: #9ca3af; cursor: not-allowed; } svg { stroke-width: 2.5px; }
+const ToggleFormButton = styled.button`
+  background-color: #16a34a;
+  color: white;
+  padding: 0.65rem 1.25rem;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background-color 0.2s ease;
+  align-self: flex-end; 
+  margin-bottom: 0.05rem;
+  &:hover {
+    background-color: #12883e;
+  }
+  &:disabled {
+    background-color: #9ca3af;
+    cursor: not-allowed;
+  }
+  svg {
+    stroke-width: 2.5px;
+  }
 `;
-const DataDisplayGrid = styled.div` /* ...seus estilos... */ 
-  display: grid; grid-template-columns: 1fr; gap: 2rem; @media (min-width: 1024px) { grid-template-columns: 1fr 1.5fr; }
+const DataDisplayGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  @media (min-width: 1024px) {
+    grid-template-columns: 1fr 1.5fr; 
+  }
 `;
-const Card = styled.div` /* ...seus estilos... */ 
-  background-color: #fff; padding: 1.5rem; border-radius: 0.75rem; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+const Card = styled.div`
+  background-color: #fff;
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 `;
-const CardTitle = styled.h2` /* ...seus estilos... */ 
-  font-size: 1.3rem; font-weight: 600; color: #005b4f; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;
+const CardTitle = styled.h2`
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #005b4f;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 `;
-const ReadingsTable = styled.table` /* ...seus estilos... */ 
-  width: 100%; border-collapse: collapse; th, td { text-align: left; padding: 0.75rem; border-bottom: 1px solid #e5e7eb; font-size: 0.9rem; } th { color: #374151; font-weight: 600; background-color: #f9fafb; } tbody tr:hover { background-color: #f9fafb; }
+const ReadingsTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  th, td {
+    text-align: left;
+    padding: 0.75rem;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 0.9rem;
+  }
+  th {
+    color: #374151;
+    font-weight: 600;
+    background-color: #f9fafb;
+  }
+  tbody tr:hover {
+    background-color: #f9fafb;
+  }
 `;
-const AddReadingForm = styled(Card)` /* ...seus estilos... */ 
-  margin-top: 2rem; max-width: 500px;
+const AddReadingForm = styled(Card)`
+  margin-top: 2rem;
+  max-width: 500px;
 `;
-const StyledForm = styled.form` /* ...seus estilos... */ 
-  display: flex; flex-direction: column; gap: 1rem;
+const StyledForm = styled.form`
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 `;
-const Input = styled.input` /* ...seus estilos... */ 
-  width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.5rem; font-size: 0.9rem; &:focus { outline: none; border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.2); }
+const Input = styled.input`
+  width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.5rem; font-size: 0.9rem; color:white;
+  &:focus { outline: none; border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.2); }
 `;
-const SubmitButton = styled.button` /* ...seus estilos... */ 
-  background-color: #16a34a; color: white; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; &:hover { background-color: #12883e; } &:disabled { background-color: #9ca3af; }
+const SubmitButton = styled.button`
+  background-color: #16a34a; color: white; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  &:hover { background-color: #12883e; }
+  &:disabled { background-color: #9ca3af; }
 `;
-const ErrorMessageForm = styled.p` /* ...seus estilos... */ 
+const ErrorMessageForm = styled.p`
   font-size: 0.75rem; color: #b91c1c; margin-top: 0.25rem;
 `;
-const LoadingOverlay = styled.div` /* ...seus estilos... */ 
-  position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:2000; svg { animation: spin 1s linear infinite; margin-bottom: 1rem; } p { font-weight: 500; color: #004d40; } @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+const LoadingOverlay = styled.div`
+  position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8);
+  display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:2000;
+  svg { animation: spin 1s linear infinite; margin-bottom: 1rem; }
+  p { font-weight: 500; color: #004d40; }
+  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 `;
-const ApiErrorMessage = styled.p` /* ...seus estilos... */ 
-  color: #b91c1c; background-color: #fee2e2; border: 1px solid #fca5a5; padding: 1rem; border-radius: 0.5rem; margin-bottom:1rem; text-align:center; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+const ApiErrorMessage = styled.p`
+  color: #b91c1c; background-color: #fee2e2; border: 1px solid #fca5a5; padding: 1rem;
+  border-radius: 0.5rem; margin-bottom:1rem; text-align:center;
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
 `;
 
-
-// --- Função de Formatação de Data ---
-const formatReadingTimestamp = (isoTimestamp: string, options?: Intl.DateTimeFormatOptions): string => {
+// --- Função de Formatação de Data Unificada ---
+const formatDisplayTimestamp = (isoTimestamp?: string | null, options?: Intl.DateTimeFormatOptions): string => {
   if (!isoTimestamp) return 'N/A';
   try {
-    // Opções padrão para uma exibição completa de data e hora
     const defaultOptions: Intl.DateTimeFormatOptions = {
       day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-      timeZone: 'America/Cuiaba', // IMPORTANTE: Ajuste para seu fuso horário local ou 'UTC'
-    };
-    return new Date(isoTimestamp).toLocaleString('pt-BR', options || defaultOptions);
-  } catch (e) {
-    console.error("Erro ao formatar timestamp:", isoTimestamp, e);
-    return "Data Inválida";
-  }
-};
-
-const formatTimestamp = (isoTimestamp: string | undefined | null, options?: Intl.DateTimeFormatOptions): string => {
-  if (!isoTimestamp) return 'N/A';
-  try {
-    // Opções padrão para uma exibição, você pode customizar ao chamar a função
-    const defaultOptions: Intl.DateTimeFormatOptions = {
-      day: '2-digit', 
-      month: '2-digit', 
-      year: 'numeric',
-      hour: '2-digit', 
-      minute: '2-digit',
-      timeZone: 'America/Cuiaba', // IMPORTANTE: Ajuste para seu fuso horário local ou desejado (ex: 'UTC')
+      hour: '2-digit', minute: '2-digit',
+      timeZone: 'America/Cuiaba', // Ajuste para seu fuso horário ou UTC
     };
     return new Date(isoTimestamp).toLocaleString('pt-BR', options || defaultOptions);
   } catch (e) {
@@ -156,18 +215,27 @@ export default function SensorData() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [showAddReadingForm, setShowAddReadingForm] = useState(false);
 
-  const { register, handleSubmit: handleAddReadingSubmit, reset: resetAddReadingForm, formState: { errors: addReadingErrors } } = useForm<AddReadingFormData>();
+  const { register, handleSubmit: handleAddReadingSubmit, reset: resetAddReadingForm, formState: { errors: addReadingErrors } } = useForm<AddReadingFormData>({
+    defaultValues: { value: '', timestamp: ''}
+  });
 
+  // Buscar lista de sensores do usuário para o dropdown
   const fetchUserSensors = useCallback(async () => {
     setIsLoadingSensors(true);
     setApiError(null);
     try {
-      const response = await axios.get(`${API_BASE_URL}/sensors`, { params: { userId: MOCK_USER_ID } });
-      const sensorsWithOptions = response.data.map((s: any) => ({ id: s.id, name: s.name, type: s.type }));
+      console.log("FRONTEND (SensorData.tsx): Buscando sensores do usuário (autenticado)...");
+      const response = await api.get('/sensors'); // <<< USA 'api' e rota /sensors (backend pega userId do token)
+      const sensorsWithOptions = response.data.map((s: any) => ({ 
+        id: Number(s.id), 
+        name: s.name, 
+        type: s.type 
+      }));
       setAvailableSensors(sensorsWithOptions || []);
-    } catch (error) {
-      console.error("Erro ao buscar sensores do usuário:", error);
-      setApiError("Não foi possível carregar a lista de sensores.");
+      console.log("FRONTEND (SensorData.tsx): Sensores para dropdown carregados:", sensorsWithOptions);
+    } catch (error: any) {
+      console.error("FRONTEND (SensorData.tsx): Erro ao buscar sensores do usuário:", error);
+      setApiError(error.response?.data?.error || "Não foi possível carregar a lista de sensores.");
       setAvailableSensors([]);
     } finally {
       setIsLoadingSensors(false);
@@ -178,6 +246,7 @@ export default function SensorData() {
     fetchUserSensors();
   }, [fetchUserSensors]);
 
+  // Buscar leituras quando um sensor é selecionado
   useEffect(() => {
     if (!selectedSensorId) {
       setSensorReadings([]);
@@ -187,20 +256,20 @@ export default function SensorData() {
       setIsLoadingReadings(true);
       setApiError(null);
       try {
-        const response = await axios.get(`${API_BASE_URL}/sensors/${selectedSensorId}/data`, {
-          params: { limit: 100, orderBy: 'asc' } // <<< Busca em ordem ASCENDENTE para o gráfico
+        console.log(`FRONTEND (SensorData.tsx): Buscando leituras para sensor ID: ${selectedSensorId}`);
+        const response = await api.get(`/sensors/${selectedSensorId}/data`, { // <<< USA 'api'
+          params: { limit: 100, orderBy: 'asc' } 
         });
-        // Armazena o timestamp original (string ISO) e garante que 'value' seja número
+        console.log("FRONTEND (SensorData.tsx): Leituras recebidas:", response.data);
         setSensorReadings(response.data.map((r: any) => ({
-            ...r,
             id: Number(r.id),
             sensorId: Number(r.sensorId),
             value: Number(r.value),
-            timestamp: r.timestamp // Mantém a string ISO original
+            timestamp: r.timestamp 
         })) || []);
-      } catch (error) {
-        console.error(`Erro ao buscar dados para o sensor ${selectedSensorId}:`, error);
-        setApiError(`Não foi possível carregar os dados para o sensor selecionado.`);
+      } catch (error: any) {
+        console.error(`FRONTEND (SensorData.tsx): Erro ao buscar dados para o sensor ${selectedSensorId}:`, error);
+        setApiError(error.response?.data?.error || `Não foi possível carregar os dados para o sensor selecionado.`);
         setSensorReadings([]);
       } finally {
         setIsLoadingReadings(false);
@@ -212,7 +281,7 @@ export default function SensorData() {
   const handleSensorSelectChange = (e: ChangeEvent<HTMLSelectElement>) => {
     setSelectedSensorId(e.target.value);
     setShowAddReadingForm(false);
-    resetAddReadingForm();
+    resetAddReadingForm({ value: '', timestamp: '' });
   };
 
   const onAddReading: SubmitHandler<AddReadingFormData> = async (data) => {
@@ -224,29 +293,33 @@ export default function SensorData() {
     setApiError(null);
     try {
       const payload = {
-        value: Number(data.value),
+        value: parseFloat(data.value), // Usar parseFloat para permitir decimais
         timestamp: data.timestamp ? new Date(data.timestamp).toISOString() : undefined,
       };
-      await axios.post(`${API_BASE_URL}/sensors/${selectedSensorId}/data`, payload);
-      resetAddReadingForm();
+      console.log(`FRONTEND (SensorData.tsx): Enviando nova leitura para sensor ID ${selectedSensorId}:`, payload);
+      await api.post(`/sensors/${selectedSensorId}/data`, payload); // <<< USA 'api'
+      
+      resetAddReadingForm({ value: '', timestamp: '' });
       setShowAddReadingForm(false);
+      
       // Forçar re-busca das leituras para o sensor selecionado
       const currentId = selectedSensorId;
       setSelectedSensorId(''); 
-      setTimeout(() => setSelectedSensorId(currentId), 0);
+      // Pequeno delay para permitir que o estado seja limpo antes de re-acionar o useEffect
+      // Isso ajuda a garantir que o useEffect de buscar leituras seja acionado novamente.
+      setTimeout(() => setSelectedSensorId(currentId), 0); 
       
     } catch (error: any) {
-      console.error("Erro ao adicionar leitura:", error);
+      console.error("FRONTEND (SensorData.tsx): Erro ao adicionar leitura:", error);
       setApiError(error.response?.data?.error || "Falha ao adicionar leitura.");
     } finally {
       setIsLoadingReadings(false);
     }
   };
   
-  const selectedSensorName = availableSensors.find(s => s.id === Number(selectedSensorId))?.name;
-  const selectedSensorType = availableSensors.find(s => s.id === Number(selectedSensorId))?.type;
-  const yAxisUnit = selectedSensorType?.toLowerCase().includes('temp') ? '°C' : 
-                    selectedSensorType?.toLowerCase().includes('umid') ? '%' : '';
+  const selectedSensor = availableSensors.find(s => s.id === Number(selectedSensorId));
+  const yAxisUnit = selectedSensor?.type?.toLowerCase().includes('temp') ? '°C' : 
+                    selectedSensor?.type?.toLowerCase().includes('umid') ? '%' : '';
 
 
   if (isLoadingSensors && !availableSensors.length) {
@@ -265,8 +338,8 @@ export default function SensorData() {
       <ControlRow>
         <SensorSelectGroup>
           <Label htmlFor="sensorSelect">Selecione um Sensor:</Label>
-          <StyledSelect id="sensorSelect" value={selectedSensorId} onChange={handleSensorSelectChange}>
-            <option value="" disabled>-- Escolha um sensor --</option>
+          <StyledSelect id="sensorSelect" value={selectedSensorId} onChange={handleSensorSelectChange} disabled={isLoadingSensors}>
+            <option value="" disabled>-- {isLoadingSensors ? "Carregando..." : "Escolha um sensor"} --</option>
             {availableSensors.map(sensor => (
               <option key={sensor.id} value={String(sensor.id)}>
                 {sensor.name} ({sensor.type})
@@ -275,13 +348,16 @@ export default function SensorData() {
           </StyledSelect>
         </SensorSelectGroup>
         {selectedSensorId && (
-             <ToggleFormButton onClick={() => {
-                 setShowAddReadingForm(!showAddReadingForm);
-                 if (!showAddReadingForm) { 
-                    resetAddReadingForm(); 
-                    setApiError(null); 
-                 }
-             }}>
+             <ToggleFormButton 
+                onClick={() => {
+                    setShowAddReadingForm(!showAddReadingForm);
+                    if (!showAddReadingForm) { 
+                        resetAddReadingForm({ value: '', timestamp: '' }); 
+                        setApiError(null); 
+                    }
+                }}
+                disabled={isLoadingReadings}
+              >
                 <FiPlus /> {showAddReadingForm ? 'Cancelar Leitura' : 'Adicionar Leitura'}
             </ToggleFormButton>
         )}
@@ -289,11 +365,15 @@ export default function SensorData() {
 
       {selectedSensorId && showAddReadingForm && (
         <AddReadingForm>
-          <CardTitle><FiPlus /> Adicionar Nova Leitura para "{selectedSensorName || 'Sensor'}"</CardTitle>
+          <CardTitle><FiPlus /> Adicionar Leitura para "{selectedSensor?.name || 'Sensor'}"</CardTitle>
           <StyledForm onSubmit={handleAddReadingSubmit(onAddReading)}>
             <div>
               <Label htmlFor="value">Valor da Leitura</Label>
-              <Input id="value" type="number" step="any" {...register('value', { required: "Valor é obrigatório", valueAsNumber: true })} />
+              <Input id="value" type="number" step="any" {...register('value', { 
+                  required: "Valor é obrigatório", 
+                  validate: v => !isNaN(parseFloat(v)) || "Deve ser um número válido" // Validação para número
+                })} 
+              />
               {addReadingErrors.value && <ErrorMessageForm>{addReadingErrors.value.message}</ErrorMessageForm>}
             </div>
             <div>
@@ -313,15 +393,14 @@ export default function SensorData() {
         ) : sensorReadings.length > 0 ? (
           <DataDisplayGrid>
             <Card>
-              <CardTitle><FiList /> Últimas Leituras: {selectedSensorName || ''}</CardTitle>
+              <CardTitle><FiList /> Últimas Leituras: {selectedSensor?.name || ''}</CardTitle>
               <div style={{maxHeight: '400px', overflowY: 'auto'}}>
                 <ReadingsTable>
                   <thead><tr><th>Data e Hora da Leitura</th><th>Valor</th></tr></thead>
                   <tbody>
-                    {/* Mostrar as leituras mais recentes primeiro na tabela */}
                     {[...sensorReadings].reverse().map(reading => (
                       <tr key={reading.id}>
-                        <td>{formatTimestamp(reading.timestamp)}</td>
+                        <td>{formatDisplayTimestamp(reading.timestamp)}</td>
                         <td>{reading.value.toFixed(2)} {yAxisUnit}</td>
                       </tr>
                     ))}
@@ -330,38 +409,41 @@ export default function SensorData() {
               </div>
             </Card>
             <Card>
-              <CardTitle><FiBarChart2 /> Histórico de Leituras: {selectedSensorName || ''}</CardTitle>
+              <CardTitle><FiBarChart2 /> Histórico de Leituras: {selectedSensor?.name || ''}</CardTitle>
               <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={sensorReadings} margin={{ top: 5, right: 30, left: 0, bottom: 30 }}> {/* Ajuste de margens */}
+                <LineChart data={sensorReadings} margin={{ top: 5, right: 30, left: 0, bottom: 45 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0"/>
                   <XAxis 
                     dataKey="timestamp" 
                     tick={{ fontSize: 10, fill: '#555' }}
-                    tickFormatter={(isoTimestamp) => formatTimestamp(isoTimestamp, {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}
-                    angle={-35}
-                    textAnchor="end"
-                    height={60} // Aumentar altura para labels angulados
-                    interval="preserveStartEnd" // ou um número para controlar a densidade
+                    tickFormatter={(isoTimestamp) => formatDisplayTimestamp(isoTimestamp, {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}
+                    angle={-35} textAnchor="end" height={70} interval="preserveStartEnd"
                   />
                   <YAxis tick={{ fontSize: 10, fill: '#555' }} unit={yAxisUnit} domain={['auto', 'auto']}/>
                   <Tooltip 
-                    labelFormatter={(labelIsoTimestamp) => formatTimestamp(labelIsoTimestamp, {day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'})}
-                    formatter={(value: number) => [`${value.toFixed(2)} ${yAxisUnit}`, "Valor"]}
+                    labelFormatter={(labelIsoTimestamp) => formatDisplayTimestamp(labelIsoTimestamp, {day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'})}
+                    formatter={(value: number) => [`${Number(value).toFixed(2)} ${yAxisUnit}`, "Valor"]}
                     contentStyle={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '8px', borderColor: '#ddd' }}
                   />
                   <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                  <Line type="monotone" dataKey="value" name={selectedSensorName || "Valor"} stroke="#00796b" strokeWidth={2} activeDot={{ r: 6 }} dot={{r:3}} />
+                  <Line type="monotone" dataKey="value" name={selectedSensor?.name || "Valor"} stroke="#00796b" strokeWidth={2} activeDot={{ r: 6 }} dot={{r:3}} />
                 </LineChart>
               </ResponsiveContainer>
             </Card>
           </DataDisplayGrid>
         ) : (
-          <Card style={{textAlign: 'center'}}>
+          <Card style={{textAlign: 'center', marginTop: '1rem'}}>
             <CardTitle>Nenhuma Leitura Encontrada</CardTitle>
-            <p>Não há dados de leitura para o sensor "{selectedSensorName || 'selecionado'}".</p>
-            <p>Você pode adicionar leituras manualmente usando o botão acima, se desejar.</p>
+            <p>Não há dados de leitura para o sensor "{selectedSensor?.name || 'selecionado'}".</p>
+            { !showAddReadingForm && <p>Você pode adicionar leituras manualmente usando o botão "Adicionar Leitura" acima.</p>}
           </Card>
         )
+      )}
+      {!selectedSensorId && !isLoadingSensors && !apiError && ( // Mostrar se nenhum sensor selecionado e não carregando/erro
+        <Card style={{textAlign: 'center', marginTop: '1rem'}}>
+            <CardTitle>Nenhum Sensor Selecionado</CardTitle>
+            <p>Por favor, escolha um sensor na lista acima para visualizar seus dados.</p>
+        </Card>
       )}
     </PageContainer>
   );

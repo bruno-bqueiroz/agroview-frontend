@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { api } from '../services/api'; // Ajuste o caminho
 import { FiMail, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
 import { FaLeaf } from 'react-icons/fa';
 import styled from 'styled-components';
@@ -292,7 +293,7 @@ export default function Login() {
       if (response.data && response.data.token) {
         localStorage.setItem('authToken', response.data.token);
         console.log("Usuário logado:", response.data.user);
-        navigate('/dashboard');
+        navigate('/app/dashboard');
       } else {
         setApiError("Resposta inesperada do servidor.");
       }

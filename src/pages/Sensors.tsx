@@ -2,10 +2,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import styled from 'styled-components';
-import axios from 'axios';
+// import axios from 'axios'; // Removido, usaremos 'api'
+import { api } from '../services/api'; // Usando a instância configurada do Axios
 import {
   FiCpu, FiPlusCircle, FiTrash2, FiTag, FiMapPin,
-  FiLoader, FiAlertCircle, FiHelpCircle, FiEdit3, FiSave // Adicionado FiEdit3, FiSave
+  FiLoader, FiAlertCircle, FiHelpCircle, FiEdit3, FiSave,
+  FiPlusSquare
 } from 'react-icons/fi';
 
 // --- Interfaces e Tipos ---
@@ -20,7 +22,7 @@ interface ISensor {
   type: string;
   model: string | null;
   active: boolean;
-  installedAt: string; // Esperamos YYYY-MM-DD ou string ISO do backend
+  installedAt: string;
   areaId: number | null;
   userId?: number | null;
   area?: {
@@ -28,380 +30,61 @@ interface ISensor {
   } | null;
 }
 
-// FormData para o sensor (usada para Adicionar e Editar)
 type SensorFormData = {
   name: string;
   type: string;
-  model: string; // Mesmo que opcional no backend, o form pode ter
+  model: string;
   active: boolean;
-  installedAt: string; // YYYY-MM-DD do input
-  areaId: string; // Valor do select (string), converter para número ao enviar
+  installedAt: string;
+  areaId: string;
 };
 
 // --- Constantes ---
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-const MOCK_USER_ID = 3;
-
-// --- Styled Components (Mantenha todas as suas definições aqui) ---
-// ... (COLE AQUI TODOS OS SEUS STYLED COMPONENTS COMPLET
-// --- Componente Principal ---
-export default function Sensors() {
-  const [sensors, setSensors] = useState<ISensor[]>([]);
-  const [availableAreas, setAvailableAreas] = useState<AreaOption[]>([]);
-  const [isLoadingPage, setIsLoadingPage] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false); // Renomeado de showAddForm
-  const [editingSensor, setEditingSensor] = useState<ISensor | null>(null); // <<< NOVO ESTADO
-
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<SensorFormData>({
-    defaultValues: { name: '', type: '', model: '', active: true, installedAt: '', areaId: "" }
-  });
-
-  // Funções fetchAvailableAreas e fetchSensors (como na versão anterior)
-  const fetchAvailableAreas = useCallback(async () => { /* ... (código da versão anterior) ... */ 
-    try {
-      const response = await axios.get(`${API_BASE_URL}/areas/user/${MOCK_USER_ID}`);
-      setAvailableAreas(response.data || []);
-    } catch (error) { console.error("Erro ao buscar áreas:", error); setAvailableAreas([]); setApiError(prev => prev ? `${prev}\nFalha ao carregar áreas.` : "Falha ao carregar áreas.");}
-  }, []);
-
-  const fetchSensors = useCallback(async () => { /* ... (código da versão anterior) ... */ 
-    setApiError(null);
-    try {
-      const response = await axios.get(`${API_BASE_URL}/sensors`, { params: { userId: MOCK_USER_ID } });
-      const fetchedSensors = response.data.map((sensor: any) => ({
-        ...sensor, id: Number(sensor.id), model: sensor.model || null,
-      }));
-      setSensors(fetchedSensors);
-    } catch (error) { console.error("Erro ao buscar sensores:", error); setSensors([]); setApiError(prev => prev ? `${prev}\nFalha ao carregar sensores.` : "Falha ao carregar sensores.");}
-  }, []);
-
-  useEffect(() => {
-    setIsLoadingPage(true);
-    Promise.all([fetchAvailableAreas(), fetchSensors()])
-      .finally(() => setIsLoadingPage(false));
-  }, [fetchAvailableAreas, fetchSensors]);
+// API_BASE_URL e MOCK_USER_ID não são mais necessários aqui
+// console.log("FRONTEND: API_BASE_URL está definida como:", API_BASE_URL); // Removido
+// console.log("FRONTEND: MOCK_USER_ID está definido como:", MOCK_USER_ID); // Removido
 
 
-  const handleAddSensor = async (data: SensorFormData) => { // Já estava async
-    setIsSubmitting(true);
-    setApiError(null);
-    try {
-      const selectedAreaIdNum = data.areaId ? parseInt(data.areaId, 10) : null;
-      if (selectedAreaIdNum === null) throw new Error("Área não selecionada");
-
-      const payload = {
-        name: data.name, type: data.type, model: data.model || null,
-        active: data.active, installedAt: data.installedAt, // YYYY-MM-DD
-        areaId: selectedAreaIdNum, userId: MOCK_USER_ID,
-      };
-      await axios.post(`${API_BASE_URL}/sensors`, payload);
-      await fetchSensors(); // Re-busca a lista
-      reset(); setShowForm(false);
-    } catch (error: any) {
-      console.error("Erro ao adicionar sensor:", error);
-      setApiError(error.response?.data?.error || "Falha ao adicionar sensor.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // <<< NOVA FUNÇÃO PARA ATUALIZAR SENSOR >>>
-  const handleUpdateSensor = async (sensorId: number, data: SensorFormData) => {
-    setIsSubmitting(true);
-    setApiError(null);
-    try {
-      const selectedAreaIdNum = data.areaId ? parseInt(data.areaId, 10) : null;
-      if (selectedAreaIdNum === null) throw new Error("Área não selecionada para atualização");
-
-      const payload = { // Envia apenas campos que podem ser atualizados
-        name: data.name,
-        type: data.type,
-        model: data.model || null,
-        active: data.active,
-        installedAt: data.installedAt, // YYYY-MM-DD
-        areaId: selectedAreaIdNum,
-        // userId não é atualizado aqui, é definido na criação
-      };
-      await axios.put(`${API_BASE_URL}/sensors/${sensorId}`, payload);
-      await fetchSensors(); // Re-busca a lista
-      reset();
-      setShowForm(false);
-      setEditingSensor(null); // Limpa estado de edição
-    } catch (error: any) {
-      console.error("Erro ao atualizar sensor:", error);
-      setApiError(error.response?.data?.error || "Falha ao atualizar sensor.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleRemoveSensor = async (sensorId: number) => { // Já estava async
-    if (!window.confirm(`Tem certeza que deseja remover o sensor ID: ${sensorId}?`)) return;
-    setIsSubmitting(true); // Usar isSubmitting para indicar operação na lista
-    setApiError(null);
-    try {
-      await axios.delete(`${API_BASE_URL}/sensors/${sensorId}`);
-      await fetchSensors(); // Re-busca a lista
-    } catch (error: any) {
-      console.error("Erro ao remover sensor:", error);
-      setApiError(error.response?.data?.error || "Falha ao remover sensor.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // <<< NOVA FUNÇÃO PARA INICIAR EDIÇÃO >>>
-  const handleStartEdit = (sensor: ISensor) => {
-    setEditingSensor(sensor);
-    // Popula o formulário. A data 'installedAt' do backend (ISO string) precisa ser formatada para YYYY-MM-DD
-    // para o input type="date".
-    const installedDate = sensor.installedAt ? sensor.installedAt.substring(0, 10) : '';
-    reset({
-      name: sensor.name,
-      type: sensor.type,
-      model: sensor.model || '',
-      active: sensor.active,
-      installedAt: installedDate,
-      areaId: sensor.areaId ? String(sensor.areaId) : "", // areaId para string para o select
-    });
-    setShowForm(true);
-    setApiError(null); // Limpa erros anteriores ao abrir o form para edição
-  };
-
-  // Função unificada para submit do formulário
-  const onFormSubmit: SubmitHandler<SensorFormData> = (data) => {
-    if (editingSensor) {
-      handleUpdateSensor(editingSensor.id, data);
-    } else {
-      handleAddSensor(data);
-    }
-  };
-  
-  const handleToggleForm = () => {
-    setShowForm(!showForm);
-    setEditingSensor(null); // Limpa edição se estava editando
-    reset({ name: '', type: '', model: '', active: true, installedAt: '', areaId: "" }); // Reseta para valores de adição
-    setApiError(null);
-  };
-
-  const formatDate = (dateStringISO: string) => { /* ... (como antes) ... */ 
-    if (!dateStringISO) return 'N/A';
-    try { return new Date(dateStringISO).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }); }
-    catch (e) { return "Data inválida"; }
-  };
-
-  if (isLoadingPage && !showForm && !sensors.length) {
-    return ( <PageContainer><LoadingOverlay><FiLoader size={40} color="#16a34a" /><p>Carregando dados...</p></LoadingOverlay></PageContainer> );
-  }
-
-  return (
-    <PageContainer>
-      <Header>
-        <Title><FiCpu /> Gerenciamento de Sensores</Title>
-        <ToggleFormButton onClick={handleToggleForm} disabled={isLoadingPage && !showForm}>
-          {showForm ? (editingSensor ? <FiEdit3 /> : <FiPlusCircle />) : <FiPlusCircle />} 
-          {showForm ? 'Cancelar' : 'Adicionar Sensor'}
-        </ToggleFormButton>
-      </Header>
-
-      {apiError && <ApiErrorMessage><FiAlertCircle /> {apiError}</ApiErrorMessage>}
-
-      {showForm && (
-        <FormContainer>
-          <FormTitle>
-            {editingSensor ? <><FiEdit3 size={28}/> Editar Sensor</> : <><FiPlusCircle size={28}/> Novo Sensor</>}
-          </FormTitle>
-          <StyledForm onSubmit={handleSubmit(onFormSubmit)}> {/* ATUALIZADO */}
-            {/* Campos do formulário com tooltips (Nome, Tipo, Modelo, Área, Data, Ativo) - como na versão anterior */}
-            {/* Nome */}
-            <FormGroup>
-              <LabelWithTooltipContainer>
-                <Label htmlFor="name">Nome do Sensor</Label>
-                <TooltipWrapper><TooltipIcon size={16} /><TooltipText>Identificador. Ex: "Termômetro Estufa A"</TooltipText></TooltipWrapper>
-              </LabelWithTooltipContainer>
-              <Input id="name" {...register('name', { required: "Nome é obrigatório" })} />
-              {errors.name && <ErrorMessageForm>{errors.name.message}</ErrorMessageForm>}
-            </FormGroup>
-            {/* Tipo */}
-            <FormGroup>
-              <LabelWithTooltipContainer>
-                <Label htmlFor="type">Tipo</Label>
-                <TooltipWrapper><TooltipIcon size={16} /><TooltipText>O que mede. Ex: "Temperatura", "Umidade"</TooltipText></TooltipWrapper>
-              </LabelWithTooltipContainer>
-              <Input id="type" {...register('type', { required: "Tipo é obrigatório" })} />
-              {errors.type && <ErrorMessageForm>{errors.type.message}</ErrorMessageForm>}
-            </FormGroup>
-            {/* Modelo */}
-            <FormGroup>
-              <LabelWithTooltipContainer>
-                <Label htmlFor="model">Modelo</Label>
-                <TooltipWrapper><TooltipIcon size={16} /><TooltipText>Modelo/fabricante. Ex: "DHT22"</TooltipText></TooltipWrapper>
-              </LabelWithTooltipContainer>
-              <Input id="model" {...register('model')} />
-            </FormGroup>
-            {/* Área Associada */}
-            <FormGroup>
-              <LabelWithTooltipContainer>
-                <Label htmlFor="areaId">Área Associada</Label>
-                <TooltipWrapper><TooltipIcon size={16} /><TooltipText>Selecione a área de instalação.</TooltipText></TooltipWrapper>
-              </LabelWithTooltipContainer>
-              <StyledSelect id="areaId" {...register('areaId', { validate: value => (value !== "" && value !== null) || "Selecione uma área" })} defaultValue="">
-                <option value="" disabled>Selecione uma área...</option>
-                {availableAreas.map(area => (<option key={area.id} value={String(area.id)}>{area.name}</option>))}
-              </StyledSelect>
-              {errors.areaId && <ErrorMessageForm>{errors.areaId.message}</ErrorMessageForm>}
-            </FormGroup>
-            {/* Data de Instalação */}
-            <FormGroup>
-              <LabelWithTooltipContainer>
-                <Label htmlFor="installedAt">Data de Instalação</Label>
-                <TooltipWrapper><TooltipIcon size={16} /><TooltipText>Início da operação.</TooltipText></TooltipWrapper>
-              </LabelWithTooltipContainer>
-              <Input id="installedAt" type="date" {...register('installedAt', { required: "Data é obrigatória" })}/>
-              {errors.installedAt && <ErrorMessageForm>{errors.installedAt.message}</ErrorMessageForm>}
-            </FormGroup>
-            {/* Sensor Ativo */}
-            <FormGroup className="full-width">
-              <LabelWithTooltipContainer>
-                <Label htmlFor="active" style={{ marginBottom: 0, cursor: 'pointer' }}>Sensor Ativo</Label>
-                <TooltipWrapper><TooltipIcon size={16} /><TooltipText>Indica se está operacional.</TooltipText></TooltipWrapper>
-              </LabelWithTooltipContainer>
-              <CheckboxContainer style={{marginTop: '-0.25rem'}}>
-                <StyledCheckbox id="active" {...register('active')} />
-              </CheckboxContainer>
-            </FormGroup>
-            <SubmitButtonForm type="submit" disabled={isSubmitting || isLoadingPage} className="full-width-button">
-              {isSubmitting ? <><FiLoader size={18} style={{animation: 'spin 1s linear infinite'}}/> Salvando...</> 
-                           : editingSensor ? <><FiSave /> Salvar Alterações</> 
-                                           : <><FiPlusCircle /> Adicionar Sensor</>}
-            </SubmitButtonForm>
-          </StyledForm>
-        </FormContainer>
-      )}
-
-      <SensorListContainer>
-        {!showForm && <SensorListTitle>Sensores Cadastrados ({sensors.length})</SensorListTitle>}
-        {sensors.length > 0 ? (
-          <SensorListUl>
-            {sensors.map(sensor => (
-              <SensorItemLi key={sensor.id}>
-                <SensorHeader>
-                  <SensorName><FiCpu /> {sensor.name}</SensorName>
-                  <StatusBadge $active={sensor.active}>{sensor.active ? 'Ativo' : 'Inativo'}</StatusBadge>
-                </SensorHeader>
-                <SensorDetails>
-                  <SensorInfo><FiTag /> Tipo: {sensor.type}</SensorInfo>
-                  <SensorInfo><FiTag /> Modelo: {sensor.model || 'N/A'}</SensorInfo>
-                  <SensorInfo><FiMapPin /> Área: {sensor.area?.name || (sensor.areaId ? `ID ${sensor.areaId}`: 'N/A')}</SensorInfo>
-                  <SensorInfo>Instalado em: {formatDate(sensor.installedAt)}</SensorInfo>
-                </SensorDetails>
-                <SensorActions>
-                  {/* BOTÃO DE EDITAR */}
-                  <ActionButton variant="edit" onClick={() => handleStartEdit(sensor)} disabled={isSubmitting || isLoadingPage}>
-                    <FiEdit3 /> Editar
-                  </ActionButton>
-                  <RemoveButton onClick={() => handleRemoveSensor(sensor.id)} disabled={isSubmitting || isLoadingPage}>
-                    <FiTrash2 />
-                  </RemoveButton>
-                </SensorActions>
-              </SensorItemLi>
-            ))}
-          </SensorListUl>
-        ) : (
-          !showForm && !isLoadingPage && !apiError && <p>Nenhum sensor encontrado.</p>
-        )}
-      </SensorListContainer>
-    </PageContainer>
-  );
-}
-
-
-
-
-
-// --- Styled Components (COLE AQUI TODOS OS SEUS STYLED COMPONENTS da última versão com tooltips) ---
-// Vou adicionar placeholders para os principais. Certifique-se de ter as definições completas.
+// --- Styled Components (COPIE E COLE SUAS DEFINIÇÕES COMPLETAS AQUI) ---
 const PageContainer = styled.div`
-  padding: 2rem;
-  background-color: #f0fdf4;
-  min-height: calc(100vh - 4rem); 
+  padding: 2rem; background-color: #f0fdf4; min-height: calc(100vh - 4rem); 
 `;
 const Header = styled.header`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 2rem;
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem;
 `;
 const Title = styled.h1`
-  font-size: 2rem;
-  font-weight: 700;
-  color: #004d40;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  font-size: 2rem; font-weight: 700; color: #004d40; display: flex; align-items: center; gap: 0.75rem;
 `;
 const ToggleFormButton = styled.button`
-  background-color: #16a34a;
-  color: white;
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 0.5rem;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: background-color 0.2s ease;
-  &:hover { background-color: #12883e; }
-  svg { stroke-width: 2.5px; }
+  background-color: #16a34a; color: white; padding: 0.75rem 1.5rem; border: none;
+  border-radius: 0.5rem; font-size: 0.9rem; font-weight: 500; cursor: pointer;
+  display: flex; align-items: center; gap: 0.5rem; transition: background-color 0.2s ease;
+  &:hover { background-color: #12883e; } svg { stroke-width: 2.5px; }
+  &:disabled { background-color: #ccc; cursor: not-allowed; }
 `;
 const FormContainer = styled.div`
-  background-color: #fff;
-  padding: 2rem;
-  border-radius: 0.75rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  margin-bottom: 2rem;
+  background-color: #fff; padding: 2rem; border-radius: 0.75rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); margin-bottom: 2rem;
 `;
 const FormTitle = styled.h2`
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #005b4f;
-  margin-bottom: 1.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  font-size: 1.5rem; font-weight: 600; color: #005b4f; margin-bottom: 1.5rem;
+  display: flex; align-items: center; gap: 0.5rem;
 `;
 const StyledForm = styled.form`
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.2rem;
-  @media (min-width: 768px) {
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
-  }
+  display: grid; grid-template-columns: 1fr; gap: 1.2rem;
+  @media (min-width: 768px) { grid-template-columns: 1fr 1fr; gap: 1.5rem; }
 `;
 const Label = styled.label`
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #374151;
+  font-size: 0.875rem; font-weight: 500; color: #374151;
 `;
 const LabelWithTooltipContainer = styled.div`
-  display: flex;
-  align-items: center;
-  margin-bottom: 0.5rem; 
+  display: flex; align-items: center; margin-bottom: 0.5rem; 
 `;
 const TooltipWrapper = styled.div`
-  position: relative;
-  display: inline-flex; 
-  align-items: center;
+  position: relative; display: inline-flex; align-items: center;
 `;
 const TooltipIcon = styled(FiHelpCircle)`
-  cursor: help;
-  color: #6b7280; 
-  margin-left: 8px; 
+  cursor: help; color: #6b7280; margin-left: 8px; 
   &:hover + div { display: block; opacity: 1; visibility: visible; }
 `;
 const TooltipText = styled.div`
@@ -414,13 +97,13 @@ const TooltipText = styled.div`
     border-width: 6px; border-style: solid; border-color: #374151 transparent transparent transparent; }
 `;
 const FormGroup = styled.div`
-  display: flex;
-  flex-direction: column;
+  display: flex; flex-direction: column;
   &.full-width { @media (min-width: 768px) { grid-column: span 2; } }
 `;
 const Input = styled.input`
   width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.5rem; font-size: 0.9rem;
-  color: #d1d5db; transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  color: white; /* Cor do texto do input */
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
   &:focus { outline: none; border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.2); }
   &::placeholder { color: #9ca3af; }
 `;
@@ -440,7 +123,7 @@ const StyledCheckbox = styled.input.attrs({ type: 'checkbox' })`
 const SubmitButtonForm = styled(ToggleFormButton)`
   width: auto; min-width: 180px; justify-content: center; margin-top: 0.5rem;
   background-color: #00796b;
-  &:hover { background-color: #005b4f; }
+  &:hover { background-color: ${ (props: { disabled?: boolean }) => props.disabled ? '' : '#005b4f'}; }
   &.full-width-button { @media (min-width: 768px) { grid-column: span 2; justify-self: start; } }
 `;
 const ErrorMessageForm = styled.p`
@@ -478,13 +161,16 @@ const SensorInfo = styled.p`
   svg { color: #6b7280; stroke-width: 2px; font-size: 1em; }
 `;
 const SensorActions = styled.div`
-  margin-top: 1rem; display: flex; justify-content: flex-end;
+  margin-top: 1rem; display: flex; justify-content: flex-end; gap: 0.5rem;
 `;
-const RemoveButton = styled.button`
-  background-color: transparent; color: #ef4444; padding: 0.5rem; border-radius: 0.375rem;
-  display: flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; font-weight: 500;
-  &:hover { background-color: #fee2e2; color: #b91c1c; }
+const ActionButton = styled.button<{ variant?: 'danger' | 'edit' }>`
+  background-color: transparent; border: none; 
+  color: ${props => props.variant === 'danger' ? '#ef4444' : props.variant === 'edit' ? '#3b82f6' : '#6b7280'}; 
+  padding: 0.5rem; border-radius: 0.375rem; cursor: pointer; display: flex; align-items: center; 
+  gap: 0.3rem; font-size: 0.8rem; font-weight: 500;
+  &:hover { background-color: ${props => props.variant === 'danger' ? '#fee2e2' : props.variant === 'edit' ? '#dbeafe' : '#f3f4f6'}; }
   svg { stroke-width: 2px; }
+  &:disabled { color: #9ca3af; background-color: #e5e7eb; cursor: not-allowed; }
 `;
 const LoadingOverlay = styled.div`
   position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8);
@@ -498,11 +184,268 @@ const ApiErrorMessage = styled.p`
   border-radius: 0.5rem; margin-bottom:1rem; text-align:center;
   display: flex; align-items: center; justify-content: center; gap: 0.5rem;
 `;
-const ActionButton = styled.button<{ variant?: 'danger' | 'edit' }>`/* Adicione este styled component se não existir */
-  background-color: transparent; border: none; 
-  color: ${props => props.variant === 'danger' ? '#ef4444' : props.variant === 'edit' ? '#3b82f6' : '#6b7280'}; 
-  padding: 0.5rem; border-radius: 0.375rem; cursor: pointer; display: flex; align-items: center; 
-  gap: 0.3rem; font-size: 0.8rem; font-weight: 500;
-  &:hover { background-color: ${props => props.variant === 'danger' ? '#fee2e2' : props.variant === 'edit' ? '#dbeafe' : '#f3f4f6'}; }
-  svg { stroke-width: 2px; }
-`; 
+
+// --- Função de Formatação de Data ---
+const formatDateForDisplay = (dateInput: string | Date | undefined | null): string => {
+  if (!dateInput) return 'N/A';
+  try {
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return "Data Inválida";
+    return date.toLocaleDateString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC'
+    });
+  } catch (e) { return "Data Inválida"; }
+};
+
+// --- Componente Principal ---
+export default function Sensors() {
+  const [sensors, setSensors] = useState<ISensor[]>([]);
+  const [availableAreas, setAvailableAreas] = useState<AreaOption[]>([]);
+  const [isLoadingPage, setIsLoadingPage] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Para submits de formulário (Add/Edit Sensor)
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingSensor, setEditingSensor] = useState<ISensor | null>(null);
+
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<SensorFormData>({
+    defaultValues: { name: '', type: '', model: '', active: true, installedAt: '', areaId: "" }
+  });
+
+  const fetchAvailableAreas = useCallback(async () => {
+    setApiError(null); 
+    try {
+      // A rota GET /areas no backend usa o userId do token
+      const response = await api.get('/areas'); 
+      setAvailableAreas(response.data || []);
+    } catch (error: any) {
+      console.error("FRONTEND (Sensors.tsx): Erro em fetchAvailableAreas:", error);
+      setAvailableAreas([]); 
+      const errorMsg = error.response?.data?.error || "Falha ao carregar lista de áreas.";
+      setApiError(prev => prev ? `${prev}\n${errorMsg}` : errorMsg);
+    }
+  }, []);
+
+  const fetchSensors = useCallback(async () => {
+    setApiError(null);
+    try {
+      // A rota GET /sensors no backend agora usa o userId do token
+      const response = await api.get('/sensors'); 
+      const fetchedSensors = response.data.map((sensor: any) => ({
+        ...sensor,
+        id: Number(sensor.id), 
+        model: sensor.model || null,
+        installedAt: sensor.installedAt, 
+      }));
+      setSensors(fetchedSensors);
+    } catch (error: any) {
+      console.error("FRONTEND (Sensors.tsx): Erro em fetchSensors:", error);
+      setSensors([]);
+      const errorMsg = error.response?.data?.error || "Não foi possível carregar os sensores.";
+      setApiError(prev => prev ? `${prev}\n${errorMsg}` : errorMsg);
+    }
+  }, []);
+
+  useEffect(() => {
+    setIsLoadingPage(true);
+    Promise.all([fetchAvailableAreas(), fetchSensors()])
+      .catch((error) => {
+        console.error("FRONTEND (Sensors.tsx): Erro no Promise.all do useEffect:", error);
+        // Erros individuais já são tratados e setam apiError, mas pode adicionar um log geral
+      })
+      .finally(() => {
+        setIsLoadingPage(false);
+      });
+  }, [fetchAvailableAreas, fetchSensors]);
+
+  const onFormSubmit: SubmitHandler<SensorFormData> = async (data) => {
+    setIsSubmitting(true);
+    setApiError(null);
+
+    const selectedAreaIdNum = data.areaId ? parseInt(data.areaId, 10) : null;
+    if (selectedAreaIdNum === null) {
+      setApiError("Por favor, selecione uma área válida.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Payload para criar ou atualizar. userId não é enviado, backend pega do token.
+    const payload = {
+      name: data.name,
+      type: data.type,
+      model: data.model || null,
+      active: data.active,
+      installedAt: data.installedAt, // YYYY-MM-DD
+      areaId: selectedAreaIdNum,
+    };
+
+    try {
+      if (editingSensor) {
+        await api.put(`/sensors/${editingSensor.id}`, payload);
+      } else {
+        await api.post('/sensors', payload);
+      }
+      await fetchSensors(); // Re-busca a lista após adicionar ou editar
+      reset({ name: '', type: '', model: '', active: true, installedAt: '', areaId: "" });
+      setShowForm(false);
+      setEditingSensor(null);
+    } catch (error: any) {
+      console.error(`Erro ao ${editingSensor ? 'atualizar' : 'adicionar'} sensor:`, error);
+      setApiError(error.response?.data?.error || `Falha ao ${editingSensor ? 'atualizar' : 'adicionar'} sensor.`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRemoveSensor = async (sensorId: number) => {
+    if (!window.confirm(`Tem certeza que deseja remover o sensor ID: ${sensorId}?`)) return;
+    setIsSubmitting(true); // Reutiliza para desabilitar botões durante a ação
+    setApiError(null);
+    try {
+      await api.delete(`/sensors/${sensorId}`); // userId para autorização é pego do token no backend
+      await fetchSensors(); // Re-busca a lista
+    } catch (error: any) {
+      console.error("Erro ao remover sensor:", error);
+      setApiError(error.response?.data?.error || "Falha ao remover sensor.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  const handleStartEdit = (sensor: ISensor) => {
+    setEditingSensor(sensor);
+    const installedDate = sensor.installedAt ? sensor.installedAt.substring(0, 10) : '';
+    reset({
+      name: sensor.name,
+      type: sensor.type,
+      model: sensor.model || '',
+      active: sensor.active,
+      installedAt: installedDate,
+      areaId: sensor.areaId ? String(sensor.areaId) : "",
+    });
+    setShowForm(true);
+    setApiError(null);
+  };
+  
+  const handleToggleForm = () => {
+    setShowForm(!showForm);
+    setEditingSensor(null);
+    reset({ name: '', type: '', model: '', active: true, installedAt: '', areaId: "" });
+    setApiError(null);
+  };
+
+  if (isLoadingPage && !showForm && !availableAreas.length && !sensors.length) {
+    return ( <PageContainer><LoadingOverlay><FiLoader size={40} color="#16a34a" /><p>Carregando dados...</p></LoadingOverlay></PageContainer> );
+  }
+
+  return (
+    <PageContainer>
+      <Header>
+        <Title><FiCpu /> Gerenciamento de Sensores</Title>
+        <ToggleFormButton onClick={handleToggleForm} disabled={isLoadingPage && !showForm}>
+          {showForm ? (editingSensor ? <FiEdit3 /> : <FiPlusSquare />) : <FiPlusSquare />} 
+          {showForm ? 'Cancelar' : 'Adicionar Sensor'}
+        </ToggleFormButton>
+      </Header>
+
+      {apiError && <ApiErrorMessage><FiAlertCircle /> {apiError}</ApiErrorMessage>}
+
+      {showForm && (
+        <FormContainer>
+          <FormTitle>
+            {editingSensor ? <><FiEdit3 size={28}/> Editar Sensor: {editingSensor.name}</> : <><FiPlusSquare size={28}/> Novo Sensor</>}
+          </FormTitle>
+          <StyledForm onSubmit={handleSubmit(onFormSubmit)}>
+            <FormGroup>
+              <LabelWithTooltipContainer>
+                <Label htmlFor="name">Nome do Sensor</Label>
+                <TooltipWrapper><TooltipIcon size={16} /><TooltipText>Identificador. Ex: "Termômetro Estufa A"</TooltipText></TooltipWrapper>
+              </LabelWithTooltipContainer>
+              <Input id="name" {...register('name', { required: "Nome é obrigatório" })} placeholder="Ex: Umidade Solo Setor 1"/>
+              {errors.name && <ErrorMessageForm>{errors.name.message}</ErrorMessageForm>}
+            </FormGroup>
+            <FormGroup>
+              <LabelWithTooltipContainer>
+                <Label htmlFor="type">Tipo</Label>
+                <TooltipWrapper><TooltipIcon size={16} /><TooltipText>O que mede. Ex: "Temperatura", "Umidade Ar"</TooltipText></TooltipWrapper>
+              </LabelWithTooltipContainer>
+              <Input id="type" {...register('type', { required: "Tipo é obrigatório" })} placeholder="Ex: Temperatura, pH"/>
+              {errors.type && <ErrorMessageForm>{errors.type.message}</ErrorMessageForm>}
+            </FormGroup>
+            <FormGroup>
+              <LabelWithTooltipContainer>
+                <Label htmlFor="model">Modelo</Label>
+                <TooltipWrapper><TooltipIcon size={16} /><TooltipText>Modelo/fabricante. Ex: "DHT22"</TooltipText></TooltipWrapper>
+              </LabelWithTooltipContainer>
+              <Input id="model" {...register('model')} placeholder="Ex: MQ-135 (Opcional)"/>
+            </FormGroup>
+            <FormGroup>
+              <LabelWithTooltipContainer>
+                <Label htmlFor="areaId">Área Associada</Label>
+                <TooltipWrapper><TooltipIcon size={16} /><TooltipText>Selecione a área de instalação.</TooltipText></TooltipWrapper>
+              </LabelWithTooltipContainer>
+              <StyledSelect 
+                id="areaId" 
+                {...register('areaId', { validate: value => (value !== "" && value !== null) || "Selecione uma área"})}
+                defaultValue=""
+              >
+                <option value="" disabled>Selecione uma área...</option>
+                {availableAreas.map(area => (<option key={area.id} value={String(area.id)}>{area.name}</option>))}
+              </StyledSelect>
+              {errors.areaId && <ErrorMessageForm>{errors.areaId.message}</ErrorMessageForm>}
+            </FormGroup>
+            <FormGroup>
+              <LabelWithTooltipContainer>
+                <Label htmlFor="installedAt">Data de Instalação</Label>
+                <TooltipWrapper><TooltipIcon size={16} /><TooltipText>Início da operação. Formato: DD/MM/AAAA</TooltipText></TooltipWrapper>
+              </LabelWithTooltipContainer>
+              <Input id="installedAt" type="date" {...register('installedAt', { required: "Data é obrigatória" })}/>
+              {errors.installedAt && <ErrorMessageForm>{errors.installedAt.message}</ErrorMessageForm>}
+            </FormGroup>
+            <FormGroup className="full-width">
+              <LabelWithTooltipContainer>
+                  <Label htmlFor="active" style={{ marginBottom: 0, cursor: 'pointer' }}>Sensor Ativo</Label>
+                  <TooltipWrapper><TooltipIcon size={16} /><TooltipText>Indica se o sensor está operacional.</TooltipText></TooltipWrapper>
+              </LabelWithTooltipContainer>
+              <CheckboxContainer style={{marginTop: '-0.25rem'}}>
+                  <StyledCheckbox id="active" {...register('active')} />
+              </CheckboxContainer>
+            </FormGroup>
+            <SubmitButtonForm type="submit" disabled={isSubmitting || isLoadingPage} className="full-width-button">
+              {isSubmitting ? <><FiLoader size={18} style={{animation: 'spin 1s linear infinite'}}/> Salvando...</> 
+                           : editingSensor ? <><FiSave /> Salvar Alterações</> 
+                                           : <><FiPlusCircle /> Adicionar Sensor</>}
+            </SubmitButtonForm>
+          </StyledForm>
+        </FormContainer>
+      )}
+
+      <SensorListContainer>
+        {!showForm && <SensorListTitle>Sensores Cadastrados ({sensors.length})</SensorListTitle>}
+        {sensors.length > 0 ? (
+          <SensorListUl>
+            {sensors.map(sensor => (
+              <SensorItemLi key={sensor.id}>
+                <SensorHeader>
+                  <SensorName><FiCpu /> {sensor.name}</SensorName>
+                  <StatusBadge $active={sensor.active}>{sensor.active ? 'Ativo' : 'Inativo'}</StatusBadge>
+                </SensorHeader>
+                <SensorDetails>
+                  <SensorInfo><FiTag /> Tipo: {sensor.type}</SensorInfo>
+                  <SensorInfo><FiTag /> Modelo: {sensor.model || 'N/A'}</SensorInfo>
+                  <SensorInfo><FiMapPin /> Área: {sensor.area?.name || (sensor.areaId && availableAreas.find(a => a.id === sensor.areaId)?.name) || 'N/A'}</SensorInfo>
+                  <SensorInfo>Instalado em: {formatDateForDisplay(sensor.installedAt)}</SensorInfo>
+                </SensorDetails>
+                <SensorActions>
+                  <ActionButton variant="edit" onClick={() => handleStartEdit(sensor)} disabled={isSubmitting || isLoadingPage}> <FiEdit3 /> Editar </ActionButton>
+                  <ActionButton variant="danger" onClick={() => handleRemoveSensor(sensor.id)} disabled={isSubmitting || isLoadingPage}> <FiTrash2 /> Remover</ActionButton>
+                </SensorActions>
+              </SensorItemLi>
+            ))}
+          </SensorListUl>
+        ) : (
+          !showForm && !isLoadingPage && !apiError && <p>Nenhum sensor encontrado. Clique em "Adicionar Sensor" para começar.</p>
+        )}
+      </SensorListContainer>
+    </PageContainer>
+  );
+}

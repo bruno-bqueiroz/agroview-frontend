@@ -124,7 +124,7 @@ export default function Register() {
       console.log("Resposta do registro:", response.data);
       setSuccessMessage("Cadastro realizado com sucesso! Você será redirecionado para o login.");
       setTimeout(() => {
-        navigate('/'); // Redireciona para a página de login após um breve delay
+        navigate('/app/'); // Redireciona para a página de login após um breve delay
       }, 2000);
     } catch (error: any) {
       console.error("Erro no registro:", error);
