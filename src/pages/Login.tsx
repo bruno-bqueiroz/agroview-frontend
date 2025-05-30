@@ -6,6 +6,7 @@ import axios from 'axios';
 import { FiMail, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
 import { FaLeaf } from 'react-icons/fa';
 import styled from 'styled-components';
+import { Link as RouterLink } from 'react-router-dom'; // Importa como alias
 
 // --- Styled Components ---
 // (Cole aqui todos os seus styled-components que já definimos para esta página:
@@ -248,6 +249,16 @@ interface LoginFormInputs {
   password: string;
 }
 
+const StyledRouterDomLink = styled(RouterLink)`
+  color: #16a34a;
+  font-weight: 500;
+  text-decoration: none;
+  &:hover {
+    color: #12883e;
+    text-decoration: underline;
+  }
+`;
+
 // --- Componente Login ---
 export default function Login() {
   const navigate = useNavigate();
@@ -373,9 +384,9 @@ export default function Login() {
 
         <HelperText>
           Ainda não tem uma conta?{' '}
-          <StyledLink href="#"> {/* Idealmente <Link to="/signup"> */}
+          <StyledRouterDomLink to="/register">
             Crie uma agora
-          </StyledLink>
+          </StyledRouterDomLink>
         </HelperText>
         <HelperText style={{marginTop: '0.5rem'}}>
           <StyledLink href="#"> {/* Idealmente <Link to="/forgot-password"> */}
